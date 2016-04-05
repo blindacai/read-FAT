@@ -30,7 +30,7 @@ int is_valid_byte(void* start){
 }
 
 
-void print_name(void* dir_mem, int dir){
+void print_name(void* dir_mem, int dir, item* new_item){
     printf("%13c", *(unsigned char*)dir_mem);
 
     int i, j;
@@ -48,7 +48,7 @@ void print_name(void* dir_mem, int dir){
 }
 
 
-void printItem(void* dir_mem, int dir){
+void printItem(void* dir_mem, int dir, item* new_item){
     if( !(is_valid_byte(dir_mem)) ) return;
 
     if(dir){
@@ -60,7 +60,7 @@ void printItem(void* dir_mem, int dir){
         printf("%16u", getByte(dir_mem, 26, 2));   // start cluster  
     }
     //printf("%13c\n", *(unsigned char*)dir_mem);
-    print_name(dir_mem, dir);
+    print_name(dir_mem, dir, new_item);
 
     return;
 }
@@ -70,20 +70,23 @@ void printAll(filesystem_info *fsinfo, void* dir_mem_arg, void* mem, item* the_p
     unsigned char* dir_mem = (unsigned char*) dir_mem_arg;
     unsigned char* mem_start  = (unsigned char*) mem;
 
-    item* self = (item*) malloc(sizeof(item));
-    self->parent = the_parent;
+    /*item* self = (item*) malloc(sizeof(item));        // hard to free
+    self->parent = the_parent;*/
+
+    item self;
+    self.parent = the_parent;
 
     while(getByte(dir_mem, 26, 2) != 0){
         if(getByte(dir_mem, 28, 4) != 0) 
-            printItem(dir_mem, 0);
+            printItem(dir_mem, 0, &self);
 
         else{
-            printItem(dir_mem, 1);
+            printItem(dir_mem, 1, &self);
             printAll(fsinfo, 
                     &mem_start[( fsinfo->cluster_offset + (getByte(dir_mem, 26, 2) - 2) * (fsinfo->cluster_size) ) *
                                 (fsinfo->sector_size) + 64],    // may put it in a struct
                     mem,
-                    self);
+                    &self);
         }
         dir_mem += 32;
     }
