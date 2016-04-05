@@ -66,20 +66,24 @@ void printItem(void* dir_mem, int dir){
 }
 
 
-void printAll(filesystem_info *fsinfo, void* dir_mem_arg, void* mem, item parent){
+void printAll(filesystem_info *fsinfo, void* dir_mem_arg, void* mem, item* the_parent){
     unsigned char* dir_mem = (unsigned char*) dir_mem_arg;
     unsigned char* mem_start  = (unsigned char*) mem;
 
+    item* self = (item*) malloc(sizeof(item));
+    self->parent = the_parent;
+
     while(getByte(dir_mem, 26, 2) != 0){
         if(getByte(dir_mem, 28, 4) != 0) 
-            printItem(dir_mem, 0, );
+            printItem(dir_mem, 0);
 
         else{
             printItem(dir_mem, 1);
             printAll(fsinfo, 
-                    &mem_start[( fsinfo->cluster_offset + (getByte(dir_mem, 26, 2) - 2) * (fsinfo->cluster_size) )*
+                    &mem_start[( fsinfo->cluster_offset + (getByte(dir_mem, 26, 2) - 2) * (fsinfo->cluster_size) ) *
                                 (fsinfo->sector_size) + 64],    // may put it in a struct
-                    mem);
+                    mem,
+                    self);
         }
         dir_mem += 32;
     }
@@ -105,6 +109,6 @@ int main(int argc, char *argv[])
     void* dir_mem_arg = mem + fsinfo->rootdir_offset * fsinfo->sector_size;
     //printf("DIR_ARG is: %c\n", *(unsigned char*)dir_mem_arg);    // FAT12, at line 289
 
-    printAll(fsinfo, dir_mem_arg, mem, 0);   // may integrate into one struct later
+    printAll(fsinfo, dir_mem_arg, mem, NULL);   // may integrate into one struct later
     
 }
