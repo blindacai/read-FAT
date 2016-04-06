@@ -26,26 +26,12 @@ void print_filesystem_info(const filesystem_info *fsinfo)
 
 
 int is_valid_byte(void* start){
-    return (*(unsigned char*)start == 0xe5)? 0 : 1;
+    unsigned char* head = (unsigned char*)start;
+    if((*head == 0xe5) || (*head == 0x00))
+        return 0;
+    else
+        return 1;
 }
-
-
-/*void print_name(void* dir_mem, int dir, item* new_item){
-    printf("%13c", *(unsigned char*)dir_mem);
-
-    int i, j;
-    for(i = 1, j = 0; i < 11; i++){
-        if( ((unsigned char*)dir_mem)[i] == 0x20 ){
-            if( (j == 0) && (dir == 0) ){
-                printf(".");
-                j++;
-            }
-        }
-        else printf("%c", ((unsigned char*)dir_mem)[i]);
-    }
-
-    printf("\n");   // to be deleted
-}*/
 
 void print_name(item* new_item){
     int i;
@@ -56,11 +42,13 @@ void print_name(item* new_item){
     if(new_item->dir)
         printf("/");
     else{
-        printf(".");
-        int j;
-        for(j = 8; j < 11; j++){
-            if(new_item->name[j] != ' ')
-                printf("%c", new_item->name[j]);      // the extension of the file      
+        if(!( (new_item->name[8] == ' ') && (new_item->name[9] == ' ') && (new_item->name[10] == ' ') )) {
+            printf(".");
+            int j;
+            for(j = 8; j < 11; j++){
+                if(new_item->name[j] != ' ')
+                    printf("%c", new_item->name[j]);      // the extension of the file      
+            }
         }
     }
 }
@@ -97,7 +85,69 @@ void feed_name(void* dir_mem, item* new_item){
 }
 
 
-void printItem(void* dir_mem, item* new_item){
+void get_entry12(unsigned int* entry, int odd) {
+  if (odd) {
+    *entry = *entry >> 12;
+  }
+  *entry = *entry & 0x000FFF;
+}
+
+int fat_lookup(filesystem_info *fsinfo, void* fat_start, int fat_entry){
+    unsigned int get_byte;
+    if(fsinfo->fs_type == FAT12) {
+        get_byte = getByte(fat_start, (fat_entry/2) * 3, 3);
+        get_entry12( &get_byte, fat_entry % 2 );
+    }
+    else
+        get_byte = getByte(fat_start, fat_entry, 4);
+
+    return get_byte;
+}
+
+void print_chain(filesystem_info *fsinfo, void* mem, int fat_entry){
+    unsigned char* fat_start = mem + (fsinfo->fat_offset) * (fsinfo->sector_size);
+    int prev = fat_entry;
+    int current = fat_lookup(fsinfo, fat_start, prev);
+
+    if((current & 0x0fff) == 0xfff)
+        printf("%d,[END]", prev);
+    else{
+        while(1){
+            int next = fat_lookup(fsinfo, fat_start, current);
+            int indicator = next + current;
+            while(next == current + 1){
+                current = next;
+                next = fat_lookup(fsinfo, fat_start, current);
+            }
+
+            if((current + next) == indicator) {
+                printf("%d,", prev);
+                if(prev != current)
+                    printf("%d,", current);
+                else {
+                    if(((next & 0x0fff) == 0xfff) || ((next & 0x0fff) == 0x0))   // to be changed
+                        break;
+                    printf("%d", next);
+                }
+            }
+
+            else if(next != current)
+                printf("%d-%d,", prev, current);
+            else
+                printf("%d,", prev);
+
+            if(((next & 0x0fff) == 0xfff) || ((next & 0x0fff) == 0x0))   // to be changed
+                break;
+
+            prev = next;
+            current = next;
+        }
+        printf("[END]");
+    } 
+}
+
+
+void printItem(filesystem_info *fsinfo, void* mem, void* dir_mem, item* new_item){
     if( !(is_valid_byte(dir_mem)) ) return;
 
     if(new_item->dir){
@@ -108,8 +158,12 @@ void printItem(void* dir_mem, item* new_item){
         printf("FILE");
         printf("%16u", getByte(dir_mem, 26, 2));   // start cluster  
     }
-    printf("                        ");
+    printf("                   ");
     feed_name(dir_mem, new_item);
+
+    printf(" -> ");
+    print_chain(fsinfo, mem, (int)getByte(dir_mem, 26, 2));
+
     printf("\n");
 
     return;
@@ -120,28 +174,29 @@ void printAll(filesystem_info *fsinfo, void* dir_mem_arg, void* mem, item* the_p
     unsigned char* dir_mem = (unsigned char*) dir_mem_arg;
     unsigned char* mem_start  = (unsigned char*) mem;
 
-
-    while(getByte(dir_mem, 26, 2) != 0){
+    while(getByte(dir_mem, 0, 2) != 0){
         /*item* self = (item*) malloc(sizeof(item));        // hard to free
         self->parent = the_parent;*/
-        item self;
-        self.parent = the_parent;
+        if(getByte(dir_mem, 26, 2) != 0){
+            item self;
+            self.parent = the_parent;
 
-        if(getByte(dir_mem, 28, 4) != 0){           // read size to determine file or dir
-            self.dir = 0;
-            printItem(dir_mem, &self);              // calll print for the files
-        }
-
-        else{
-            self.dir = 1;
-            printItem(dir_mem, &self);               // call print for the dirs (ASS1)
+            if(getByte(dir_mem, 28, 4) != 0){           // read size to determine file or dir
+                self.dir = 0;
+                printItem(fsinfo, mem, dir_mem, &self);              // call print for the files
+            }
+            else{
+                self.dir = 1;
+                printItem(fsinfo, mem, dir_mem, &self);               // call print for the dirs (ASS1)
             
-            printAll(fsinfo, 
-                    &mem_start[ ( fsinfo->cluster_offset + (getByte(dir_mem, 26, 2) - 2) * (fsinfo->cluster_size) ) *
-                                (fsinfo->sector_size) + 64 ],    // may put it in a struct
-                    mem,
-                    &self);                         // print out all the things in subdirs
+                printAll(fsinfo, 
+                        &mem_start[ ( fsinfo->cluster_offset + (getByte(dir_mem, 26, 2) /*startib cluster*/- 2) * (fsinfo->cluster_size) ) *
+                                (fsinfo->sector_size) + 64 ],
+                        mem,
+                        &self);                         // print out all the things in subdirs
+            }    
         }
+
         dir_mem += 32;                             // move on at the same level
     }
     return;
@@ -167,5 +222,4 @@ int main(int argc, char *argv[])
     //printf("DIR_ARG is: %c\n", *(unsigned char*)dir_mem_arg);    // FAT12, at line 289
 
     printAll(fsinfo, dir_mem_arg, mem, NULL);   // may integrate into one struct later
-    
 }

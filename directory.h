@@ -12,9 +12,8 @@
 // Add any directory specific data structure definitions here along with any prototypes
 typedef struct item {
 	int dir;
-	char name[8];
-	char extension[3];
+	char name[11];
 	struct item* parent;
-} item; 
+}item; 
 
 #endif
