@@ -30,7 +30,7 @@ int is_valid_byte(void* start){
 }
 
 
-void print_name(void* dir_mem, int dir, item* new_item){
+/*void print_name(void* dir_mem, int dir, item* new_item){
     printf("%13c", *(unsigned char*)dir_mem);
 
     int i, j;
@@ -45,13 +45,62 @@ void print_name(void* dir_mem, int dir, item* new_item){
     }
 
     printf("\n");   // to be deleted
+}*/
+
+void print_name(item* new_item){
+    int i;
+    for(i = 0; i < 8; i++){
+        if(new_item->name[i] != ' ')
+            printf("%c", new_item->name[i]);   // the name of the file
+    }
+    if(new_item->dir)
+        printf("/");
+    else{
+        printf(".");
+        int j;
+        for(j = 8; j < 11; j++){
+            if(new_item->name[j] != ' ')
+                printf("%c", new_item->name[j]);      // the extension of the file      
+        }
+    }
+}
+
+void print_all_name(item* new_item){
+    if(new_item->parent == NULL)
+        print_name(new_item);
+    else{
+        print_all_name(new_item->parent);
+        print_name(new_item);
+    }
 }
 
 
-void printItem(void* dir_mem, int dir, item* new_item){
+// fill in name and ext. of the struct
+void feed_name(void* dir_mem, item* new_item){
+    int i;
+    for(i = 0; i < 8; i++){
+        if( ((unsigned char*)dir_mem) [i] == 0x20 )
+            new_item->name[i] = ' ';
+        else
+            new_item->name[i] = ((unsigned char*)dir_mem)[i];
+    }
+
+    int j;
+    for(j = 8; j < 11; j++){
+        if( ((unsigned char*)dir_mem) [j] == 0x20 )
+            new_item->name[j] = ' ';
+        else
+            new_item->name[j] = ((unsigned char*)dir_mem)[j];        
+    }
+
+    print_all_name(new_item);
+}
+
+
+void printItem(void* dir_mem, item* new_item){
     if( !(is_valid_byte(dir_mem)) ) return;
 
-    if(dir){
+    if(new_item->dir){
         printf("DIR");
         printf("%17u", getByte(dir_mem, 26, 2));   // start cluster
     }
@@ -59,8 +108,9 @@ void printItem(void* dir_mem, int dir, item* new_item){
         printf("FILE");
         printf("%16u", getByte(dir_mem, 26, 2));   // start cluster  
     }
-    //printf("%13c\n", *(unsigned char*)dir_mem);
-    print_name(dir_mem, dir, new_item);
+    printf("                        ");
+    feed_name(dir_mem, new_item);
+    printf("\n");
 
     return;
 }
@@ -70,25 +120,29 @@ void printAll(filesystem_info *fsinfo, void* dir_mem_arg, void* mem, item* the_p
     unsigned char* dir_mem = (unsigned char*) dir_mem_arg;
     unsigned char* mem_start  = (unsigned char*) mem;
 
-    /*item* self = (item*) malloc(sizeof(item));        // hard to free
-    self->parent = the_parent;*/
-
-    item self;
-    self.parent = the_parent;
 
     while(getByte(dir_mem, 26, 2) != 0){
-        if(getByte(dir_mem, 28, 4) != 0) 
-            printItem(dir_mem, 0, &self);
+        /*item* self = (item*) malloc(sizeof(item));        // hard to free
+        self->parent = the_parent;*/
+        item self;
+        self.parent = the_parent;
+
+        if(getByte(dir_mem, 28, 4) != 0){           // read size to determine file or dir
+            self.dir = 0;
+            printItem(dir_mem, &self);              // calll print for the files
+        }
 
         else{
-            printItem(dir_mem, 1, &self);
+            self.dir = 1;
+            printItem(dir_mem, &self);               // call print for the dirs (ASS1)
+            
             printAll(fsinfo, 
-                    &mem_start[( fsinfo->cluster_offset + (getByte(dir_mem, 26, 2) - 2) * (fsinfo->cluster_size) ) *
-                                (fsinfo->sector_size) + 64],    // may put it in a struct
+                    &mem_start[ ( fsinfo->cluster_offset + (getByte(dir_mem, 26, 2) - 2) * (fsinfo->cluster_size) ) *
+                                (fsinfo->sector_size) + 64 ],    // may put it in a struct
                     mem,
-                    &self);
+                    &self);                         // print out all the things in subdirs
         }
-        dir_mem += 32;
+        dir_mem += 32;                             // move on at the same level
     }
     return;
 }
