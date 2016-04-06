@@ -33,13 +33,13 @@ int is_valid_byte(void* start){
         return 1;
 }
 
-void print_name(item* new_item){
+void print_name(item* new_item, int is_leaf){
     int i;
     for(i = 0; i < 8; i++){
         if(new_item->name[i] != ' ')
             printf("%c", new_item->name[i]);   // the name of the file
     }
-    if(new_item->dir)
+    if(new_item->dir && (!is_leaf))
         printf("/");
     else{
         if(!( (new_item->name[8] == ' ') && (new_item->name[9] == ' ') && (new_item->name[10] == ' ') )) {
@@ -53,12 +53,12 @@ void print_name(item* new_item){
     }
 }
 
-void print_all_name(item* new_item){
+void print_all_name(item* new_item, int is_leaf){
     if(new_item->parent == NULL)
-        print_name(new_item);
+        print_name(new_item, is_leaf);
     else{
-        print_all_name(new_item->parent);
-        print_name(new_item);
+        print_all_name(new_item->parent, 0);
+        print_name(new_item, is_leaf);
     }
 }
 
@@ -81,7 +81,7 @@ void feed_name(void* dir_mem, item* new_item){
             new_item->name[j] = ((unsigned char*)dir_mem)[j];        
     }
 
-    print_all_name(new_item);
+    print_all_name(new_item, 1);
 }
 
 
@@ -92,35 +92,37 @@ void get_entry12(unsigned int* entry, int odd) {
   *entry = *entry & 0x000FFF;
 }
 
-int fat_lookup(filesystem_info *fsinfo, void* fat_start, int fat_entry){
+unsigned int fat_lookup(filesystem_info *fsinfo, void* fat_start, int fat_entry){
     unsigned int get_byte;
     if(fsinfo->fs_type == FAT12) {
         get_byte = getByte(fat_start, (fat_entry/2) * 3, 3);
         get_entry12( &get_byte, fat_entry % 2 );
     }
-    else
+    else {
         get_byte = getByte(fat_start, fat_entry, 4);
+        //get_byte = get_byte & 0x0fffffff;
+    }
 
     return get_byte;
 }
 
-void print_chain(filesystem_info *fsinfo, void* mem, int fat_entry){
+void print_chain(filesystem_info *fsinfo, void* mem, unsigned int fat_entry){
     unsigned char* fat_start = mem + (fsinfo->fat_offset) * (fsinfo->sector_size);
-    int prev = fat_entry;
-    int current = fat_lookup(fsinfo, fat_start, prev);
+    unsigned int prev = fat_entry;
+    unsigned int current = fat_lookup(fsinfo, fat_start, prev);
 
     if((current & 0x0fff) == 0xfff)
         printf("%d,[END]", prev);
     else{
         while(1){
-            int next = fat_lookup(fsinfo, fat_start, current);
-            int indicator = next + current;
+            unsigned int next = fat_lookup(fsinfo, fat_start, current);
+            unsigned int indicator = next + current;
             while(next == current + 1){
                 current = next;
                 next = fat_lookup(fsinfo, fat_start, current);
             }
 
-            if((current + next) == indicator) {
+            if( ((next + current) == indicator) && (current != (prev + 1)) ) {
                 printf("%d,", prev);
                 if(prev != current)
                     printf("%d,", current);
@@ -158,11 +160,14 @@ void printItem(filesystem_info *fsinfo, void* mem, void* dir_mem, item* new_item
         printf("FILE");
         printf("%16u", getByte(dir_mem, 26, 2));   // start cluster  
     }
-    printf("                   ");
+
+    printf("%11u", getByte(dir_mem, 28, 4));
+
+    printf("  ");
     feed_name(dir_mem, new_item);
 
     printf(" -> ");
-    print_chain(fsinfo, mem, (int)getByte(dir_mem, 26, 2));
+    print_chain(fsinfo, mem,    getByte(dir_mem, 26, 2));
 
     printf("\n");
 
