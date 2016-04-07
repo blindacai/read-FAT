@@ -101,15 +101,14 @@ unsigned int fat_lookup(filesystem_info *fsinfo, void* fat_start, int fat_entry)
     else {
         //printf("FAT32_LOOKUP: %u HAHA; FAT_ENTRY: %u XIXI\n", fat_start, fat_entry*4);
         get_byte = getByte(fat_start, fat_entry * 4, 4);
-        //get_byte = get_byte & 0x0fffffff;
+        get_byte = get_byte & 0x000fff;
         
     }
     
     return get_byte;
 }
 
-void print_chain12(filesystem_info *fsinfo, void* mem, unsigned int fat_entry){
-    
+void print_chain(filesystem_info *fsinfo, void* mem, unsigned int fat_entry){
     unsigned char* fat_start = mem + (fsinfo->fat_offset) * (fsinfo->sector_size);
     unsigned int prev = fat_entry;
     unsigned int current = fat_lookup(fsinfo, fat_start, prev);
@@ -130,7 +129,7 @@ void print_chain12(filesystem_info *fsinfo, void* mem, unsigned int fat_entry){
                 if(prev != current)
                     printf("%d,", current);
                 else {
-                    if(((next & 0x0fff) == 0xfff) || ((next & 0x0fff) == 0x0))   // to be changed
+                    if((next & 0x0fff) == 0xfff || 0xf0f || 0x0)
                         break;
                     printf("%d", next);
                 }
@@ -141,67 +140,13 @@ void print_chain12(filesystem_info *fsinfo, void* mem, unsigned int fat_entry){
             else
                 printf("%d,", prev);
             
-            if(((next & 0x0fff) == 0xfff) || ((next & 0x0fff) == 0x0))   // to be changed
+            if((next & 0x0fff) == 0xfff || 0xf0f || 0x0)
                 break;
             
             prev = next;
             current = next;
         }
         printf("[END]");
-    }
-}
-
-void print_chain32(filesystem_info *fsinfo, void* mem, unsigned int fat_entry){
-    unsigned char* fat_start = mem + (fsinfo->fat_offset) * (fsinfo->sector_size);
-    unsigned int prev = fat_entry;
-    unsigned int current = fat_lookup(fsinfo, fat_start, prev);
-    unsigned int cur = current & 0x0fffffff;
-    
-    // printf("CURRENT VALUE : %u LULULU \n", current);
-    if(cur == 0x0fffffff){
-        printf("%d,[END]", prev);
-    }else{
-        while(1){
-            unsigned int next = fat_lookup(fsinfo, fat_start, current);
-            unsigned int indicator = next + current;
-            while(next == current + 1){
-                current = next;
-                next = fat_lookup(fsinfo, fat_start, current);
-            }
-            
-            if( ((next + current) == indicator) && (current != (prev + 1)) ) {
-                printf("%d,", prev);
-                if(prev != current)
-                    printf("%d,", current);
-                else {
-                    if(((next & 0x0fffffff) == 0x0fffffff || 0xffffff0f) || ((next & 0x0fff) == 0x0))   // to be changed
-                        break;
-                    printf("%d", next);
-                }
-            }
-            
-            else if(next != current)
-                printf("%d-%d,", prev, current);
-            else
-                printf("%d,", prev);
-            
-            if(((current & 0x0fffffff) == 0x0fffffff || 0xffffff0f) || ((next & 0x0fff) == 0x0))   // to be changed
-                break;
-            
-            prev = next;
-            current = next;
-        }
-        printf("[END]");
-    }
-    
-}
-
-
-void print_chain(filesystem_info *fsinfo, void* mem, unsigned int fat_entry){
-    if (fsinfo -> fs_type == FAT12){
-        print_chain12(fsinfo, mem, fat_entry);
-    }else{
-        print_chain32(fsinfo, mem, fat_entry);
     }
 }
 
