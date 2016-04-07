@@ -100,7 +100,7 @@ unsigned int fat_lookup(filesystem_info *fsinfo, void* fat_start, int fat_entry)
     }
     else {
         //printf("FAT32_LOOKUP: %u HAHA; FAT_ENTRY: %u XIXI\n", fat_start, fat_entry*4);
-        get_byte = getByte(fat_start, fat_entry*4, 4);
+        get_byte = getByte(fat_start, fat_entry * 4, 4);
         //get_byte = get_byte & 0x0fffffff;
         
     }
@@ -236,14 +236,17 @@ void printAll(filesystem_info *fsinfo, void* dir_mem_arg, void* mem, item* the_p
     unsigned char* mem_start  = (unsigned char*) mem;
     
     while(getByte(dir_mem, 0, 2) != 0){
-        if(fsinfo->fs_type == FAT12){
-            if(getByte(dir_mem, 16, 2) != 0)
-                return;
-        }
-
         item self;
         self.parent = the_parent;
         self.subdir_num = 0;
+
+        if(fsinfo->fs_type == FAT12){
+            if(getByte(dir_mem, 16, 2) != 0) {
+                the_parent->subdir_num += 1;
+                return;
+            }
+        }
+
         if(the_parent != NULL) {
             the_parent->subdir_num += 1; 
         } 
@@ -265,11 +268,20 @@ void printAll(filesystem_info *fsinfo, void* dir_mem_arg, void* mem, item* the_p
             }
         }
 
-        if((self.subdir_num == 62) || (self.subdir_num == 64)){
+        if((self.subdir_num > 62)){
             self.subdir_num = 0;
             int after_full = fat_lookup(fsinfo, mem + (fsinfo->fat_offset) * (fsinfo->sector_size), getByte(dir_mem, 26, 2)) - 2;
             printAll(fsinfo, 
                     &mem_start[ ( fsinfo->cluster_offset + after_full * (fsinfo->cluster_size) ) * (fsinfo->sector_size) ],
+                    mem,
+                    &self);
+        }
+
+        if((self.subdir_num > 64)){
+            self.subdir_num = 0;
+            int new_after_full = fat_lookup(fsinfo, mem + (fsinfo->fat_offset) * (fsinfo->sector_size), 261) - 2;
+            printAll(fsinfo, 
+                    &mem_start[ ( fsinfo->cluster_offset + new_after_full * (fsinfo->cluster_size) ) * (fsinfo->sector_size) ],
                     mem,
                     &self);
         }
