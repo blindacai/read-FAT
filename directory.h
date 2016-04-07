@@ -13,6 +13,7 @@
 typedef struct item {
 	int dir;
 	char name[11];
+	unsigned int subdir_num;
 	struct item* parent;
 }item; 
 
