@@ -37,7 +37,7 @@ void print_name(item* new_item, int is_leaf){
     int i;
     for(i = 0; i < 8; i++){
         if(new_item->name[i] != ' ')
-            printf("%c", new_item->name[i]);   // the name of the file
+            printf("%c", new_item->name[i]);
     }
     if(new_item->dir && (!is_leaf))
         printf("/");
@@ -47,7 +47,7 @@ void print_name(item* new_item, int is_leaf){
             int j;
             for(j = 8; j < 11; j++){
                 if(new_item->name[j] != ' ')
-                    printf("%c", new_item->name[j]);      // the extension of the file
+                    printf("%c", new_item->name[j]);
             }
         }
     }
@@ -99,7 +99,6 @@ unsigned int fat_lookup(filesystem_info *fsinfo, void* fat_start, int fat_entry)
         get_entry12( &get_byte, fat_entry % 2 );
     }
     else {
-        //printf("FAT32_LOOKUP: %u HAHA; FAT_ENTRY: %u XIXI\n", fat_start, fat_entry*4);
         get_byte = getByte(fat_start, fat_entry * 4, 4);
         get_byte = get_byte & 0x000fff;
         
@@ -129,7 +128,7 @@ void print_chain(filesystem_info *fsinfo, void* mem, unsigned int fat_entry){
                 if(prev != current)
                     printf("%d,", current);
                 else {
-                    if((next & 0x0fff) == 0xfff || 0xf0f || 0x0)
+                    if((next & 0x0fff) == 0xfff)
                         break;
                     printf("%d", next);
                 }
@@ -140,7 +139,7 @@ void print_chain(filesystem_info *fsinfo, void* mem, unsigned int fat_entry){
             else
                 printf("%d,", prev);
             
-            if((next & 0x0fff) == 0xfff || 0xf0f || 0x0)
+            if((next & 0x0fff) == 0xfff)
                 break;
             
             prev = next;
@@ -183,7 +182,7 @@ void printAll(filesystem_info *fsinfo, void* dir_mem_arg, void* mem, item* the_p
     while(getByte(dir_mem, 0, 2) != 0){
         item self;
         self.parent = the_parent;
-        self.subdir_num = 0;
+        self.subdir_num = 2;
 
         if(fsinfo->fs_type == FAT12){
             if(getByte(dir_mem, 16, 2) != 0) {
@@ -197,42 +196,37 @@ void printAll(filesystem_info *fsinfo, void* dir_mem_arg, void* mem, item* the_p
         } 
         if(getByte(dir_mem, 26, 2) != 0){
             
-            if(getByte(dir_mem, 28, 4) != 0){           // read size to determine file or dir
+            if(getByte(dir_mem, 28, 4) != 0){
                 self.dir = 0;
-                printItem(fsinfo, mem, dir_mem, &self);              // call print for the files
+                printItem(fsinfo, mem, dir_mem, &self);
             }
             else{
                 self.dir = 1;
-                printItem(fsinfo, mem, dir_mem, &self);               // call print for the dirs (ASS1)
+                printItem(fsinfo, mem, dir_mem, &self);
                 
                 printAll(fsinfo,
-                         &mem_start[ ( fsinfo->cluster_offset + (getByte(dir_mem, 26, 2) /*startib cluster*/- 2) * (fsinfo->cluster_size) ) *
+                         &mem_start[ ( fsinfo->cluster_offset + (getByte(dir_mem, 26, 2) - 2) * (fsinfo->cluster_size) ) *
                                     (fsinfo->sector_size) + 64 ],
                          mem,
-                         &self);                         // print out all the things in subdirs
+                         &self);
             }
         }
 
-        if((self.subdir_num > 62)){
-            self.subdir_num = 0;
-            int after_full = fat_lookup(fsinfo, mem + (fsinfo->fat_offset) * (fsinfo->sector_size), getByte(dir_mem, 26, 2)) - 2;
-            printAll(fsinfo, 
-                    &mem_start[ ( fsinfo->cluster_offset + after_full * (fsinfo->cluster_size) ) * (fsinfo->sector_size) ],
-                    mem,
-                    &self);
-        }
+        int after_full = fat_lookup(fsinfo, mem + (fsinfo->fat_offset) * (fsinfo->sector_size), getByte(dir_mem, 26, 2));
+        if(after_full != 0 && after_full != 4088 && after_full != 4080){
+            while((after_full & 0x0ff) != 0xff){
+                if(self.subdir_num > 64){
+                    self.subdir_num = 0;
+                    printAll(fsinfo, 
+                            &mem_start[ ( fsinfo->cluster_offset + (after_full - 2) * (fsinfo->cluster_size) ) * (fsinfo->sector_size) ],
+                            mem,
+                            &self);
+                }
+                after_full = fat_lookup(fsinfo, mem + (fsinfo->fat_offset) * (fsinfo->sector_size), after_full);
+            }
+        }    
 
-        if((self.subdir_num > 64)){
-            self.subdir_num = 0;
-            int after_full = fat_lookup(fsinfo, mem + (fsinfo->fat_offset) * (fsinfo->sector_size),
-                                    fat_lookup(fsinfo, mem + (fsinfo->fat_offset) * (fsinfo->sector_size), getByte(dir_mem, 26, 2)));
-            printAll(fsinfo, 
-                    &mem_start[ ( fsinfo->cluster_offset + (after_full - 2) * (fsinfo->cluster_size) ) * (fsinfo->sector_size) ],
-                    mem,
-                    &self);
-        }
-        
-        dir_mem += 32;                             // move on at the same level
+        dir_mem += 32;
     }
     return;
 }
