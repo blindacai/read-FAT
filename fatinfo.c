@@ -236,11 +236,18 @@ void printAll(filesystem_info *fsinfo, void* dir_mem_arg, void* mem, item* the_p
     unsigned char* mem_start  = (unsigned char*) mem;
     
     while(getByte(dir_mem, 0, 2) != 0){
-        /*item* self = (item*) malloc(sizeof(item));        // hard to free
-         self->parent = the_parent;*/
+        if(fsinfo->fs_type == FAT12){
+            if(getByte(dir_mem, 16, 2) != 0)
+                return;
+        }
+
+        item self;
+        self.parent = the_parent;
+        self.subdir_num = 0;
+        if(the_parent != NULL) {
+            the_parent->subdir_num += 1; 
+        } 
         if(getByte(dir_mem, 26, 2) != 0){
-            item self;
-            self.parent = the_parent;
             
             if(getByte(dir_mem, 28, 4) != 0){           // read size to determine file or dir
                 self.dir = 0;
@@ -257,16 +264,20 @@ void printAll(filesystem_info *fsinfo, void* dir_mem_arg, void* mem, item* the_p
                          &self);                         // print out all the things in subdirs
             }
         }
+
+        if((self.subdir_num == 62) || (self.subdir_num == 64)){
+            self.subdir_num = 0;
+            int after_full = fat_lookup(fsinfo, mem + (fsinfo->fat_offset) * (fsinfo->sector_size), getByte(dir_mem, 26, 2)) - 2;
+            printAll(fsinfo, 
+                    &mem_start[ ( fsinfo->cluster_offset + after_full * (fsinfo->cluster_size) ) * (fsinfo->sector_size) ],
+                    mem,
+                    &self);
+        }
         
         dir_mem += 32;                             // move on at the same level
     }
     return;
 }
-
-
-
-
-
 
 
 
@@ -289,5 +300,5 @@ int main(int argc, char *argv[])
     void* dir_mem_arg = mem + fsinfo->rootdir_offset * fsinfo->sector_size;
     //printf("DIR_ARG is: %c\n", *(unsigned char*)dir_mem_arg);    // FAT12, at line 289
     
-    printAll(fsinfo, dir_mem_arg, mem, NULL);   // may integrate into one struct later
+    printAll(fsinfo, dir_mem_arg, mem, NULL);
 }
