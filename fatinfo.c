@@ -279,9 +279,10 @@ void printAll(filesystem_info *fsinfo, void* dir_mem_arg, void* mem, item* the_p
 
         if((self.subdir_num > 64)){
             self.subdir_num = 0;
-            int new_after_full = fat_lookup(fsinfo, mem + (fsinfo->fat_offset) * (fsinfo->sector_size), 261) - 2;
+            int after_full = fat_lookup(fsinfo, mem + (fsinfo->fat_offset) * (fsinfo->sector_size),
+                                    fat_lookup(fsinfo, mem + (fsinfo->fat_offset) * (fsinfo->sector_size), getByte(dir_mem, 26, 2)));
             printAll(fsinfo, 
-                    &mem_start[ ( fsinfo->cluster_offset + new_after_full * (fsinfo->cluster_size) ) * (fsinfo->sector_size) ],
+                    &mem_start[ ( fsinfo->cluster_offset + (after_full - 2) * (fsinfo->cluster_size) ) * (fsinfo->sector_size) ],
                     mem,
                     &self);
         }
