@@ -100,19 +100,20 @@ unsigned int fat_lookup(filesystem_info *fsinfo, void* fat_start, int fat_entry)
     }
     else {
         get_byte = getByte(fat_start, fat_entry * 4, 4);
-        get_byte = get_byte & 0x000fff;
+        get_byte = get_byte & 0x0fffffff;
         
     }
     
     return get_byte;
 }
 
+
 void print_chain(filesystem_info *fsinfo, void* mem, unsigned int fat_entry){
     unsigned char* fat_start = mem + (fsinfo->fat_offset) * (fsinfo->sector_size);
     unsigned int prev = fat_entry;
     unsigned int current = fat_lookup(fsinfo, fat_start, prev);
     
-    if((current & 0x0fff) == 0xfff)
+    if((current & 0x0fff) == 0x0fff)
         printf("%d,[END]", prev);
     else{
         while(1){
@@ -128,7 +129,7 @@ void print_chain(filesystem_info *fsinfo, void* mem, unsigned int fat_entry){
                 if(prev != current)
                     printf("%d,", current);
                 else {
-                    if((next & 0x0fff) == 0xfff)
+                    if((next & 0x0fff) == 0x0fff)
                         break;
                     printf("%d", next);
                 }
@@ -139,7 +140,7 @@ void print_chain(filesystem_info *fsinfo, void* mem, unsigned int fat_entry){
             else
                 printf("%d,", prev);
             
-            if((next & 0x0fff) == 0xfff)
+            if((next & 0x0fff) == 0x0fff)
                 break;
             
             prev = next;
@@ -195,7 +196,6 @@ void printAll(filesystem_info *fsinfo, void* dir_mem_arg, void* mem, item* the_p
             the_parent->subdir_num += 1; 
         } 
         if(getByte(dir_mem, 26, 2) != 0){
-            
             if(getByte(dir_mem, 28, 4) != 0){
                 self.dir = 0;
                 printItem(fsinfo, mem, dir_mem, &self);
@@ -203,34 +203,31 @@ void printAll(filesystem_info *fsinfo, void* dir_mem_arg, void* mem, item* the_p
             else{
                 self.dir = 1;
                 printItem(fsinfo, mem, dir_mem, &self);
-                
                 printAll(fsinfo,
-                         &mem_start[ ( fsinfo->cluster_offset + (getByte(dir_mem, 26, 2) - 2) * (fsinfo->cluster_size) ) *
-                                    (fsinfo->sector_size) + 64 ],
+                         &mem_start[( fsinfo->cluster_offset + (getByte(dir_mem, 26, 2) - 2) * (fsinfo->cluster_size) ) *
+                                    (fsinfo->sector_size) + 64],
                          mem,
                          &self);
             }
         }
 
         int after_full = fat_lookup(fsinfo, mem + (fsinfo->fat_offset) * (fsinfo->sector_size), getByte(dir_mem, 26, 2));
-        if(after_full != 0 && after_full != 4088 && after_full != 4080){
-            while((after_full & 0x0ff) != 0xff){
-                if(self.subdir_num > 64){
-                    self.subdir_num = 0;
-                    printAll(fsinfo, 
-                            &mem_start[ ( fsinfo->cluster_offset + (after_full - 2) * (fsinfo->cluster_size) ) * (fsinfo->sector_size) ],
-                            mem,
-                            &self);
-                }
-                after_full = fat_lookup(fsinfo, mem + (fsinfo->fat_offset) * (fsinfo->sector_size), after_full);
+        while( (after_full > 0x002) && (after_full < 0xFEF) ){
+            if(self.subdir_num > 64){
+                self.subdir_num = 0;
+                printAll(fsinfo, 
+                        &mem_start[ ( fsinfo->cluster_offset + (after_full - 2) * (fsinfo->cluster_size) ) * 
+                                    (fsinfo->sector_size) ],
+                        mem,
+                        &self);
             }
-        }    
+            after_full = fat_lookup(fsinfo, mem + (fsinfo->fat_offset) * (fsinfo->sector_size), after_full);
+        }   
 
         dir_mem += 32;
     }
     return;
 }
-
 
 
 /*
@@ -251,6 +248,5 @@ int main(int argc, char *argv[])
     // Add call to function to print the directory tree
     void* dir_mem_arg = mem + fsinfo->rootdir_offset * fsinfo->sector_size;
     //printf("DIR_ARG is: %c\n", *(unsigned char*)dir_mem_arg);    // FAT12, at line 289
-    
     printAll(fsinfo, dir_mem_arg, mem, NULL);
 }
