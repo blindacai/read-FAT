@@ -6,6 +6,8 @@
 #include "fatfs.h"
 #include "directory.h"
 
+#define DIR_ENTRY_SIZE 32
+
 /*
  * Function to print information about a FAT filesystem (useful for debugging).
  */
@@ -80,15 +82,15 @@ void feed_name(void* dir_mem, item* new_item){
         else
             new_item->name[j] = ((unsigned char*)dir_mem)[j];
     }
-    
+
     print_all_name(new_item, 1);
 }
 
 
 void get_entry12(unsigned int* entry, int odd) {
-    if (odd) {
+    if (odd)
         *entry = *entry >> 12;
-    }
+
     *entry = *entry & 0x000FFF;
 }
 
@@ -101,7 +103,6 @@ unsigned int fat_lookup(filesystem_info *fsinfo, void* fat_start, int fat_entry)
     else {
         get_byte = getByte(fat_start, fat_entry * 4, 4);
         get_byte = get_byte & 0x0fffffff;
-        
     }
     
     return get_byte;
@@ -204,20 +205,18 @@ void printAll(filesystem_info *fsinfo, void* dir_mem_arg, void* mem, item* the_p
                 self.dir = 1;
                 printItem(fsinfo, mem, dir_mem, &self);
                 printAll(fsinfo,
-                         &mem_start[( fsinfo->cluster_offset + (getByte(dir_mem, 26, 2) - 2) * (fsinfo->cluster_size) ) *
-                                    (fsinfo->sector_size) + 64],
+                         &mem_start[( fsinfo->cluster_offset + (getByte(dir_mem, 26, 2) - 2) * (fsinfo->cluster_size) ) * (fsinfo->sector_size) + 64],
                          mem,
                          &self);
             }
         }
 
         int after_full = fat_lookup(fsinfo, mem + (fsinfo->fat_offset) * (fsinfo->sector_size), getByte(dir_mem, 26, 2));
-        while( (after_full > 0x002) && (after_full < 0xFEF) ){
-            if(self.subdir_num > 64){
+        while( (after_full > 0x002) && (after_full < 0xFFFFFEF) ){
+            if(self.subdir_num > (fsinfo->cluster_size) * (fsinfo->sector_size) / DIR_ENTRY_SIZE){
                 self.subdir_num = 0;
                 printAll(fsinfo, 
-                        &mem_start[ ( fsinfo->cluster_offset + (after_full - 2) * (fsinfo->cluster_size) ) * 
-                                    (fsinfo->sector_size) ],
+                        &mem_start[ ( fsinfo->cluster_offset + (after_full - 2) * (fsinfo->cluster_size) ) * (fsinfo->sector_size) ],
                         mem,
                         &self);
             }
